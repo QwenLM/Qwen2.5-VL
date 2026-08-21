@@ -675,15 +675,20 @@ class FlattenedDataCollatorForSupervisedDataset(DataCollatorForSupervisedDataset
         return batch
 
 
-def make_supervised_data_module(processor, data_args) -> Dict:
+def make_supervised_data_module(
+    processor,
+    data_args,
+    tokenizer: Optional[transformers.PreTrainedTokenizerBase] = None,
+) -> Dict:
     """Make dataset and collator for supervised fine-tuning."""
     train_dataset = LazySupervisedDataset(processor, data_args=data_args)
+    collator_tokenizer = tokenizer if tokenizer is not None else processor.tokenizer
     if data_args.data_flatten or data_args.data_packing:
-        data_collator = FlattenedDataCollatorForSupervisedDataset(processor.tokenizer)
+        data_collator = FlattenedDataCollatorForSupervisedDataset(collator_tokenizer)
         return dict(
             train_dataset=train_dataset, eval_dataset=None, data_collator=data_collator
         )
-    data_collator = DataCollatorForSupervisedDataset(processor.tokenizer)
+    data_collator = DataCollatorForSupervisedDataset(collator_tokenizer)
     return dict(
         train_dataset=train_dataset, eval_dataset=None, data_collator=data_collator
     )
