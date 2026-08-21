@@ -183,7 +183,9 @@ def train(attn_implementation="flash_attention_2"):
             model.visual.print_trainable_parameters()
             model.model.print_trainable_parameters()
     
-    data_module = make_supervised_data_module(processor, data_args=data_args)
+    data_module = make_supervised_data_module(
+        processor, data_args=data_args, tokenizer=tokenizer
+    )
     trainer = Trainer(
         model=model, processing_class=tokenizer, args=training_args, **data_module
     )
