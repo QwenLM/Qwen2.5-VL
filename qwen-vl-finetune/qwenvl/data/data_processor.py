@@ -4,7 +4,7 @@ import logging
 import re
 import time
 import itertools
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, is_dataclass, replace
 from typing import Dict, Optional, Sequence, List, Tuple, Any
 from collections.abc import Sequence
 from pathlib import Path
@@ -41,6 +41,36 @@ def _make_abs_paths(base: Path, files: str) -> str:
     return f"{(base / files).resolve()}"
 
 
+def _get_size_value(size, key):
+    if isinstance(size, dict):
+        return size.get(key, "N/A")
+    return getattr(size, key, "N/A")
+
+
+def _update_processor_size(processor, shortest_edge, longest_edge):
+    size = getattr(processor, "size", None)
+    if size is None:
+        return False
+
+    if is_dataclass(size):
+        try:
+            processor.size = replace(
+                size,
+                shortest_edge=shortest_edge,
+                longest_edge=longest_edge,
+            )
+            return True
+        except (TypeError, ValueError):
+            return False
+
+    try:
+        size["shortest_edge"] = shortest_edge
+        size["longest_edge"] = longest_edge
+    except (AttributeError, TypeError):
+        return False
+    return True
+
+
 def update_processor_pixels(processor, data_args):
     logger = logging.getLogger(__name__)
 
@@ -50,8 +80,12 @@ def update_processor_pixels(processor, data_args):
     rank0_print(f"Image min_pixels: {getattr(ip, 'min_pixels', 'N/A')}")
     rank0_print(f"Image max_pixels: {getattr(ip, 'max_pixels', 'N/A')}")
     rank0_print(f"ip.size: {ip.size}")
-    rank0_print(f"Image size (shortest_edge): {ip.size.get('shortest_edge', 'N/A')}")
-    rank0_print(f"Image size (longest_edge):  {ip.size.get('longest_edge', 'N/A')}")
+    rank0_print(
+        f"Image size (shortest_edge): {_get_size_value(ip.size, 'shortest_edge')}"
+    )
+    rank0_print(
+        f"Image size (longest_edge):  {_get_size_value(ip.size, 'longest_edge')}"
+    )
 
     if hasattr(ip, "min_pixels") and hasattr(ip, "max_pixels"):
         ip.min_pixels = data_args.min_pixels
@@ -59,9 +93,7 @@ def update_processor_pixels(processor, data_args):
         rank0_print(f"✅ Updated image_processor min_pixels to {data_args.min_pixels}")
         rank0_print(f"✅ Updated image_processor max_pixels to {data_args.max_pixels}")
 
-    if hasattr(ip, "size") and isinstance(ip.size, dict):
-        ip.size["shortest_edge"] = data_args.min_pixels
-        ip.size["longest_edge"] = data_args.max_pixels
+    if _update_processor_size(ip, data_args.min_pixels, data_args.max_pixels):
         rank0_print(
             f"✅ Updated image_processor size['shortest_edge'] to {data_args.min_pixels}"
         )
@@ -72,8 +104,12 @@ def update_processor_pixels(processor, data_args):
     rank0_print("=== AFTER IMAGE PROCESSOR PARAMETERS ===")
     rank0_print(f"Image min_pixels: {getattr(ip, 'min_pixels', 'N/A')}")
     rank0_print(f"Image max_pixels: {getattr(ip, 'max_pixels', 'N/A')}")
-    rank0_print(f"Image size (shortest_edge): {ip.size.get('shortest_edge', 'N/A')}")
-    rank0_print(f"Image size (longest_edge):  {ip.size.get('longest_edge', 'N/A')}")
+    rank0_print(
+        f"Image size (shortest_edge): {_get_size_value(ip.size, 'shortest_edge')}"
+    )
+    rank0_print(
+        f"Image size (longest_edge):  {_get_size_value(ip.size, 'longest_edge')}"
+    )
 
     # --- Video Processor ---
     if hasattr(processor, "video_processor") and processor.video_processor is not None:
@@ -85,9 +121,11 @@ def update_processor_pixels(processor, data_args):
         rank0_print(f"Video max_frames: {getattr(vp, 'max_frames', 'N/A')}")
         rank0_print(f"Video fps: {getattr(vp, 'fps', 'N/A')}")
         rank0_print(
-            f"Video size (shortest_edge): {vp.size.get('shortest_edge', 'N/A')}"
+            f"Video size (shortest_edge): {_get_size_value(vp.size, 'shortest_edge')}"
         )
-        rank0_print(f"Video size (longest_edge):  {vp.size.get('longest_edge', 'N/A')}")
+        rank0_print(
+            f"Video size (longest_edge):  {_get_size_value(vp.size, 'longest_edge')}"
+        )
 
         if hasattr(vp, "min_pixels") and hasattr(vp, "max_pixels"):
             vp.min_pixels = data_args.video_min_pixels
@@ -113,14 +151,16 @@ def update_processor_pixels(processor, data_args):
             vp.fps = data_args.video_fps
             rank0_print(f"✅ Updated video_processor fps to {data_args.video_fps}")
 
-        if hasattr(vp, "size") and isinstance(vp.size, dict):
-            vp.size["shortest_edge"] = data_args.video_min_pixels
-            vp.size["longest_edge"] = data_args.video_max_pixels
+        if _update_processor_size(
+            vp, data_args.video_min_pixels, data_args.video_max_pixels
+        ):
             rank0_print(
-                f"✅ Updated Video size (shortest_edge): {vp.size.get('shortest_edge', 'N/A')}"
+                "✅ Updated Video size (shortest_edge): "
+                f"{_get_size_value(vp.size, 'shortest_edge')}"
             )
             rank0_print(
-                f"✅ Updated Video size (longest_edge):  {vp.size.get('longest_edge', 'N/A')}"
+                "✅ Updated Video size (longest_edge):  "
+                f"{_get_size_value(vp.size, 'longest_edge')}"
             )
 
         rank0_print("=== AFTER VIDEO PROCESSOR PARAMETERS ===")
@@ -130,9 +170,11 @@ def update_processor_pixels(processor, data_args):
         rank0_print(f"Video max_frames: {getattr(vp, 'max_frames', 'N/A')}")
         rank0_print(f"Video fps: {getattr(vp, 'fps', 'N/A')}")
         rank0_print(
-            f"Video size (shortest_edge): {vp.size.get('shortest_edge', 'N/A')}"
+            f"Video size (shortest_edge): {_get_size_value(vp.size, 'shortest_edge')}"
         )
-        rank0_print(f"Video size (longest_edge):  {vp.size.get('longest_edge', 'N/A')}")
+        rank0_print(
+            f"Video size (longest_edge):  {_get_size_value(vp.size, 'longest_edge')}"
+        )
 
     return processor
 
