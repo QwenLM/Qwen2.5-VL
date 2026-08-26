@@ -725,7 +725,6 @@ inputs = inputs.to(model.device)
 
 </details>
 
-
 <details>
 <summary>Video Backends and URL Compatibility</summary>
 
