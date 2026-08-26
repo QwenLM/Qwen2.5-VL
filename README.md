@@ -564,7 +564,7 @@ messages = [
                     "file:///path/to/frame3.jpg",
                     "file:///path/to/frame4.jpg",
                 ],
-                'sample_fps':'1', # sample_fps: frame sampling rate (frames per second), used to determine timestamps for each frame
+                "sample_fps": 1.0, # frame sampling rate (frames per second), used to determine the timestamp of each frame. See "Pre-sampled Frames and Timestamps" below if the frames are not evenly spaced.
             },
             {"type": "text", "text": "Describe this video."},
         ],
