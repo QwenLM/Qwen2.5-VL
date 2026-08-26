@@ -700,7 +700,7 @@ messages = [
 ]
 
 text = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-images, videos, video_kwargs = process_vision_info(messages, image_patch_size=16, return_video_kwargs=True, return_video_metadata=True)
+images, videos, video_kwargs = process_vision_info(messages, image_patch_size=processor.image_processor.patch_size, return_video_kwargs=True, return_video_metadata=True)
 
 # drop the placeholder metadata and pass the source video's own values instead
 if videos is not None:
