@@ -665,6 +665,68 @@ print(output_text)
 </details>
 
 <details>
+<summary>Pre-sampled Frames and Timestamps</summary>
+
+Qwen3-VL inserts a `<{t:.1f} seconds>` marker before every temporal patch. A temporal patch spans `merge_size = 2` frames and its marker is the mean of the two frame times, so 8 frames produce 4 markers rather than 8.
+
+Each frame time is `frames_indices[i] / fps`, and both values come from the video metadata. When `video` is a local path or a url, `qwen-vl-utils` reads them from the file. When `video` is a frame list it cannot, so it returns a placeholder in which `frames_indices` is `range(n)` over the frame count and the frame rate comes from `sample_fps` (default `2.0`). Passing that placeholder through unchanged gives evenly spaced timestamps whatever frames were actually selected, and nothing is raised or logged.
+
+For frames extracted at a constant rate, set `sample_fps` to that rate, as in the frame-list example above. For frames chosen at uneven intervals (random sampling, keyframe selection), `sample_fps` cannot describe the spacing, so replace the returned metadata with the source video's own values:
+
+```python
+# continuing from the Process Videos example above
+from torchcodec.decoders import VideoDecoder
+from PIL import Image
+
+decoder = VideoDecoder("/path/to/video1.mp4")
+total_num_frames = decoder.metadata.num_frames
+source_fps = float(decoder.metadata.average_fps)
+
+# any selection of frame indices, evenly spaced or not
+frames_indices = [38, 69, 102, 200, 208, 243, 246, 335]
+frames = [
+    Image.fromarray(f.permute(1, 2, 0).numpy())
+    for f in decoder.get_frames_at(indices=frames_indices).data
+]
+
+messages = [
+    {
+        "role": "user",
+        "content": [
+            {"type": "video", "video": frames},
+            {"type": "text", "text": "Describe this video."},
+        ],
+    }
+]
+
+text = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+images, videos, video_kwargs = process_vision_info(messages, image_patch_size=16, return_video_kwargs=True, return_video_metadata=True)
+
+# drop the placeholder metadata and pass the source video's own values instead
+if videos is not None:
+    videos, _ = zip(*videos)
+    videos = list(videos)
+video_metadatas = [
+    {"fps": source_fps, "frames_indices": frames_indices, "total_num_frames": total_num_frames}
+]
+
+inputs = processor(text=text, images=images, videos=videos, video_metadata=video_metadatas, return_tensors="pt", do_resize=False, **video_kwargs)
+inputs = inputs.to(model.device)
+```
+
+📌 Note:
+
+- `return_video_metadata=True` alone is not enough for a frame list. The metadata it returns has to be replaced, otherwise two different selections of the same number of frames produce identical timestamps.
+- The values do not have to come from the file. Any consistent pair works, as long as `frames_indices[i] / fps` is the timestamp you want in seconds. `total_num_frames` is required but does not affect the markers.
+- If `video_metadata` is omitted, the processor falls back to `fps=24` and logs a warning. It is printed only once per process, so it is easy to miss in a long run.
+- Keep `**video_kwargs`: it carries `do_sample_frames=False`, without which the processor samples the already-sampled frames again.
+- `sample_fps` must be a number, and is ignored when `video` is a path or a url.
+- A frame list is padded to an even length by repeating the last frame, so the processed video may contain one more frame than was passed in.
+
+</details>
+
+
+<details>
 <summary>Video Backends and URL Compatibility</summary>
 
 Currently, `qwen-vl-utils` supports three video decoding backends: `torchvision`, `decord`, and `torchcodec`. While `decord` and `torchcodec` generally offer significantly faster decoding speeds compared to `torchvision`, we recommend using `torchcodec`. This is because `decord` has known issues, such as decoding hangs, and its project is no longer actively maintained.
