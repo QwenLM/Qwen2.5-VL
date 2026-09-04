@@ -34,6 +34,7 @@ from transformers import (
     Qwen3VLMoeForConditionalGeneration
 )
 from qwenvl.data.data_processor import make_supervised_data_module
+from qwenvl.train.lora_utils import enable_multimodal_components, get_lora_modules_to_save
 from qwenvl.train.argument import (
     ModelArguments,
     DataArguments,
@@ -167,15 +168,29 @@ def train(attn_implementation="flash_attention_2"):
         for p in model.parameters():
             p.requires_grad = False
 
+        modules_to_save = get_lora_modules_to_save(
+            tune_mm_vision=model_args.tune_mm_vision,
+            tune_mm_mlp=model_args.tune_mm_mlp,
+            model=model,
+        )
         lora_config = LoraConfig(
             r=training_args.lora_r or 64,
             lora_alpha=training_args.lora_alpha or 128,
             lora_dropout=training_args.lora_dropout or 0.05,
             target_modules=["q_proj", "k_proj", "v_proj", "o_proj"],  # Qwen 的 attention 线性层
+            modules_to_save=modules_to_save,
             bias="none",
             task_type=TaskType.CAUSAL_LM,
         )
         model = get_peft_model(model, lora_config)
+        # PEFT freezes the complete base model before adding adapters.  Apply
+        # the multimodal component policy afterwards so the documented vision
+        # and projector flags also work with LoRA training.
+        enable_multimodal_components(
+            model,
+            tune_mm_vision=model_args.tune_mm_vision,
+            tune_mm_mlp=model_args.tune_mm_mlp,
+        )
     else:
         set_model(model_args, model)
 
